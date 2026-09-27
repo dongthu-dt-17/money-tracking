@@ -1,10 +1,11 @@
 /**
- * Sổ chi tiêu — backend Google Apps Script, gắn vào một Google Sheet.
+ * Sổ chi tiêu — API Google Apps Script, gắn vào một Google Sheet.
+ * Giao diện (index.html) chạy trên GitHub Pages và gọi API này bằng POST.
  *
  * Danh mục, nguồn tiền / tài sản và số dư đầu kỳ nằm trong các sheet cấu hình
  * (Danh mục, Tài sản, Cài đặt) — sửa trên sheet, app tự nhận, không cần sửa code.
  *
- * Lần đầu: chạy hàm setup() một lần, rồi Deploy > New deployment > Web app.
+ * Lần đầu: chạy setup() → Deploy dạng Web app (Anyone) → chạy showSetupInfo() để lấy mã kết nối.
  */
 
 // Mỗi bảng: tên sheet + các cột (key dùng trong code → tiêu đề trên sheet).
@@ -73,62 +74,79 @@ const DEFAULT_ROWS = {
 };
 
 const ENTRY_KINDS = ['expenses', 'transfers'];
+const TOKEN_PROP = 'API_TOKEN';
 
-// ───────────────────────── Web app ─────────────────────────
+// ───────────────────────── API ─────────────────────────
 
-function doGet() {
-  ensureSetup_();
-  const data = getAppData();
-  const page = HtmlService.createTemplateFromFile('Index');
-  page.boot = JSON.stringify(data).replace(/</g, '\\u003c');
-  return page.evaluate()
-    .setTitle(data.config.title)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover');
+const API = {
+  getAppData: p => getAppData_(p.month),
+  getMonthData: p => getMonthData_(normMonth_(p.month) || currentMonth_()),
+  addExpense: p => addExpense_(p),
+  addTransfer: p => addTransfer_(p),
+  deleteEntry: p => deleteEntry_(p.kind, p.id),
+};
+
+/** Body: {"token": "...", "action": "addExpense", "payload": {...}} → {"ok": true, "result": ...} */
+function doPost(e) {
+  let res;
+  try {
+    const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    checkToken_(req.token);
+    ensureSetup_();
+    const fn = API[req.action];
+    if (!fn) throw apiError_('Không có hành động "' + req.action + '"', 'INVALID');
+    res = { ok: true, result: fn(req.payload || {}) };
+  } catch (err) {
+    res = { ok: false, error: (err && err.message) || String(err), code: (err && err.code) || 'SERVER' };
+  }
+  return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/** Cấu hình + số liệu của một tháng (mặc định tháng hiện tại). */
-function getAppData(month) {
+/** Mở URL web app trên trình duyệt để kiểm tra API đang chạy. */
+function doGet() {
+  return ContentService.createTextOutput('Sổ chi tiêu API đang chạy. Mở app từ link GitHub Pages.');
+}
+
+function getAppData_(month) {
   return { config: getConfig_(), data: getMonthData_(normMonth_(month) || currentMonth_()) };
 }
 
-function getMonthData(month) {
-  return getMonthData_(normMonth_(month) || currentMonth_());
+function addExpense_(p) {
+  const amount = toAmount_(p.amount);
+  const category = String(p.category || '').trim();
+  if (activeList_('categories').every(c => c.name !== category)) throw apiError_('Danh mục "' + category + '" không còn trong sheet Danh mục', 'INVALID');
+  saveEntry_('expenses', p, { category, amount, note: clean_(p.note) });
+  return getAppData_();
 }
 
-function addExpense(input) {
-  const amount = toAmount_(input.amount);
-  const category = String(input.category || '').trim();
-  if (activeList_('categories').every(c => c.name !== category)) throw new Error('Danh mục không hợp lệ');
-  saveEntry_('expenses', { category, amount, note: clean_(input.note) });
-  return getAppData();
-}
-
-function addTransfer(input) {
-  const amount = toAmount_(input.amount);
-  const name = String(input.source || '').trim();
+function addTransfer_(p) {
+  const amount = toAmount_(p.amount);
+  const name = String(p.source || '').trim();
   const source = activeList_('sources').find(s => s.name === name);
-  if (!source) throw new Error('Nguồn tiền không hợp lệ');
-  const sourceNote = clean_(input.sourceNote);
+  if (!source) throw apiError_('Nguồn "' + name + '" không còn trong sheet Tài sản', 'INVALID');
+  const sourceNote = clean_(p.sourceNote);
   if (toBool_(source.requireNote, BOOL_DEFAULTS.requireNote) && !sourceNote) {
-    throw new Error('Nguồn "' + name + '" cần ghi chú nguồn');
+    throw apiError_('Nguồn "' + name + '" cần ghi chú nguồn', 'INVALID');
   }
-  saveEntry_('transfers', { source: name, sourceNote, amount, note: clean_(input.note) });
-  return getAppData();
+  saveEntry_('transfers', p, { source: name, sourceNote, amount, note: clean_(p.note) });
+  return getAppData_();
 }
 
-function deleteEntry(kind, id) {
-  if (ENTRY_KINDS.indexOf(kind) === -1) throw new Error('Loại dữ liệu không hợp lệ');
+/** Xoá theo ID. Không tìm thấy (đã xoá trước đó) vẫn coi là thành công, để gửi lại không báo lỗi. */
+function deleteEntry_(kind, id) {
+  if (ENTRY_KINDS.indexOf(kind) === -1) throw apiError_('Loại dữ liệu không hợp lệ', 'INVALID');
   withLock_(() => {
     const row = readRows_(kind).find(r => String(r.id) === String(id));
-    if (!row) throw new Error('Không tìm thấy dòng cần xoá (có thể đã bị xoá)');
+    if (!row) return;
     sheet_(kind).deleteRow(row._row);
+    delete ROWS_CACHE[kind];
   });
-  return getAppData();
+  return getAppData_();
 }
 
 // ───────────────────────── Setup ─────────────────────────
 
-/** Tạo / bổ sung các sheet theo SCHEMA. Chạy an toàn nhiều lần. */
+/** Tạo / bổ sung các sheet theo SCHEMA và tạo mã bí mật. Chạy an toàn nhiều lần. */
 function setup() {
   const ss = SpreadsheetApp.getActive();
   Object.keys(SCHEMA).forEach(key => {
@@ -156,11 +174,28 @@ function setup() {
     const isSchema = Object.values(SCHEMA).some(d => d.sheet === sh.getName());
     if (!isSchema && sh.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(sh);
   });
+
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty(TOKEN_PROP)) props.setProperty(TOKEN_PROP, Utilities.getUuid().replace(/-/g, '').slice(0, 16));
+  showSetupInfo();
+}
+
+/** In ra URL web app và mã bí mật để nhập vào app trên điện thoại. Chạy sau khi đã Deploy. */
+function showSetupInfo() {
+  const token = PropertiesService.getScriptProperties().getProperty(TOKEN_PROP);
+  const url = ScriptApp.getService().getUrl();
+  Logger.log('Mã bí mật: ' + token);
+  Logger.log('URL web app: ' + (url || '(chưa Deploy — Deploy rồi chạy lại showSetupInfo)'));
+}
+
+/** Đổi mã bí mật (khi nghi bị lộ). Sau đó nhập mã mới vào app. */
+function resetToken() {
+  PropertiesService.getScriptProperties().setProperty(TOKEN_PROP, Utilities.getUuid().replace(/-/g, '').slice(0, 16));
+  showSetupInfo();
 }
 
 function ensureSetup_() {
-  const ss = SpreadsheetApp.getActive();
-  if (Object.values(SCHEMA).some(d => !ss.getSheetByName(d.sheet))) setup();
+  if (Object.keys(SCHEMA).some(key => !sheetOrNull_(key))) setup();
 }
 
 function applyFormats_(sh, def) {
@@ -189,10 +224,10 @@ function getConfig_() {
     defaultSign: String(s.DEFAULT_SIGN || '-').trim() === '+' ? 1 : -1,
     currentMonth: currentMonth_(),
     categories: activeList_('categories').map(c => ({
-      name: String(c.name), icon: String(c.icon || ''), color: String(c.color || '').trim(),
+      name: c.name, icon: String(c.icon || ''), color: String(c.color || '').trim(),
     })),
     sources: activeList_('sources').map(src => ({
-      name: String(src.name),
+      name: src.name,
       requireNote: toBool_(src.requireNote, BOOL_DEFAULTS.requireNote),
       trackBalance: toBool_(src.trackBalance, BOOL_DEFAULTS.trackBalance),
     })),
@@ -230,7 +265,7 @@ function getMonthData_(month) {
     .map(src => {
       const own = r => r.source === src.name;
       return {
-        name: String(src.name),
+        name: src.name,
         balance: num_(src.openingBalance) - sum(transfers.filter(r => own(r) && r.month <= month)),
         changeThisMonth: -sum(monthTransfers.filter(own)),
       };
@@ -252,19 +287,37 @@ function getMonthData_(month) {
 
 // ───────────────────────── Đọc / ghi sheet ─────────────────────────
 
-function saveEntry_(kind, fields) {
+// Bộ nhớ tạm trong một lần gọi API: mỗi sheet chỉ đọc một lần.
+const ROWS_CACHE = {};
+const SHEET_CACHE = {};
+
+/**
+ * Ghi một giao dịch. ID do app tạo sẵn, nên gửi lại cùng một khoản (khi mạng chập chờn)
+ * không bị ghi trùng. Thời gian lấy lúc bấm Lưu trên điện thoại nếu hợp lệ, không thì giờ server.
+ */
+function saveEntry_(kind, p, fields) {
   withLock_(() => {
-    const now = new Date();
-    appendRows_(kind, [Object.assign({
-      id: Utilities.getUuid().slice(0, 8),
-      createdAt: now,
-      month: Utilities.formatDate(now, tz_(), 'yyyy-MM'),
-    }, fields)]);
+    const id = String(p.id || '').trim() || Utilities.getUuid().slice(0, 8);
+    if (readRows_(kind).some(r => String(r.id) === id)) return;
+    const at = entryTime_(p.at);
+    appendRows_(kind, [Object.assign({ id, createdAt: at, month: Utilities.formatDate(at, tz_(), 'yyyy-MM') }, fields)]);
   });
 }
 
+function entryTime_(iso) {
+  const now = new Date();
+  const at = iso ? new Date(iso) : null;
+  const ok = at && !isNaN(at) && at <= new Date(now.getTime() + 5 * 60e3) && at >= new Date(now.getTime() - 7 * 864e5);
+  return ok ? at : now;
+}
+
+function sheetOrNull_(key) {
+  if (!SHEET_CACHE[key]) SHEET_CACHE[key] = SpreadsheetApp.getActive().getSheetByName(SCHEMA[key].sheet);
+  return SHEET_CACHE[key];
+}
+
 function sheet_(key) {
-  const sh = SpreadsheetApp.getActive().getSheetByName(SCHEMA[key].sheet);
+  const sh = sheetOrNull_(key);
   if (!sh) throw new Error('Thiếu sheet "' + SCHEMA[key].sheet + '" — hãy chạy setup()');
   return sh;
 }
@@ -276,11 +329,10 @@ function headerRow_(sh) {
 
 /** Đọc toàn bộ dòng thành object. Cột có trong SCHEMA → key; cột tự thêm → giữ tiêu đề. */
 function readRows_(key) {
-  const sh = sheet_(key);
-  const values = sh.getDataRange().getValues();
-  if (values.length < 2) return [];
+  if (ROWS_CACHE[key]) return ROWS_CACHE[key];
+  const values = sheet_(key).getDataRange().getValues();
   const labelToKey = invert_(SCHEMA[key].cols);
-  const keys = values[0].map(h => labelToKey[String(h).trim()] || String(h).trim());
+  const keys = (values[0] || []).map(h => labelToKey[String(h).trim()] || String(h).trim());
   const rows = [];
   values.slice(1).forEach((r, i) => {
     if (r.every(v => v === '')) return;
@@ -288,6 +340,7 @@ function readRows_(key) {
     keys.forEach((k, c) => { if (k) obj[k] = r[c]; });
     rows.push(obj);
   });
+  ROWS_CACHE[key] = rows;
   return rows;
 }
 
@@ -300,12 +353,13 @@ function appendRows_(key, objs) {
     return v === undefined || v === null ? '' : v;
   }));
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, header.length).setValues(rows);
+  delete ROWS_CACHE[key];
 }
 
 function activeList_(key) {
   return readRows_(key)
     .filter(r => String(r.name || '').trim() && toBool_(r.active, BOOL_DEFAULTS.active))
-    .map(r => Object.assign(r, { name: String(r.name).trim() }))
+    .map(r => Object.assign({}, r, { name: String(r.name).trim() }))
     .sort((a, b) => (Number(a.order) || 999) - (Number(b.order) || 999));
 }
 
@@ -315,13 +369,14 @@ function getSettings_() {
   return out;
 }
 
-/** Chuẩn hoá một dòng giao dịch để gửi về trình duyệt (không được gửi kiểu Date). */
+/** Chuẩn hoá một dòng giao dịch để trả về dạng JSON. */
 function normEntry_(r) {
   const out = {};
   Object.keys(r).forEach(k => {
     if (k === '_row') return;
     out[k] = r[k] instanceof Date ? r[k].toISOString() : r[k];
   });
+  out.id = String(r.id);
   out.month = normMonth_(r.month);
   out.amount = num_(r.amount);
   out.createdAt = r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt || '');
@@ -329,6 +384,18 @@ function normEntry_(r) {
 }
 
 // ───────────────────────── Tiện ích ─────────────────────────
+
+function checkToken_(token) {
+  const expected = PropertiesService.getScriptProperties().getProperty(TOKEN_PROP);
+  if (!expected) throw apiError_('API chưa có mã bí mật — chạy setup() trong Apps Script', 'AUTH');
+  if (String(token || '') !== expected) throw apiError_('Sai mã bí mật', 'AUTH');
+}
+
+function apiError_(message, code) {
+  const err = new Error(message);
+  err.code = code;
+  return err;
+}
 
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
@@ -353,7 +420,7 @@ function num_(v) {
 
 function toAmount_(v) {
   const n = Math.round(Number(v));
-  if (!n || !isFinite(n)) throw new Error('Số tiền phải là số khác 0');
+  if (!n || !isFinite(n)) throw apiError_('Số tiền phải là số khác 0', 'INVALID');
   return n;
 }
 

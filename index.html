@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Chi tiêu">
+<meta name="theme-color" content="#f4f3f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111110" media="(prefers-color-scheme: dark)">
+<title>Sổ chi tiêu</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4f3f0; --surface: #fcfcfb; --surface-2: #eeede9; --line: #e2e1dc;
+    --text: #0b0b0b; --text-2: #52514e; --muted: #8a8984;
+    --accent: #2a78d6; --accent-soft: #e3eefb; --on-accent: #fff;
+    --pos: #1c7a2e; --warn: #9a6400; --warn-soft: #fbf0d9; --danger: #c73a39;
+    --series-1: #2a78d6; --other: #b5b4ae;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #111110; --surface: #1a1a19; --surface-2: #262624; --line: #33332f;
+      --text: #ffffff; --text-2: #c3c2b7; --muted: #8f8e86;
+      --accent: #3987e5; --accent-soft: #1d2e44; --on-accent: #fff;
+      --pos: #4cbb63; --warn: #e0a83a; --warn-soft: #3a2f17; --danger: #e66767;
+      --series-1: #3987e5; --other: #5c5b56;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: env(safe-area-inset-top) 16px calc(84px + env(safe-area-inset-bottom));
+    max-width: 560px; margin: 0 auto;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* Header */
+  header { padding: 16px 0 12px; display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+  header .label { font-size: 12px; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; display: flex; align-items: center; gap: 6px; }
+  header .balance { font-size: 26px; font-weight: 700; }
+  header .right { text-align: right; font-size: 13px; color: var(--text-2); }
+  header .right b { display: block; color: var(--text); font-size: 16px; }
+  .gear { border: 0; background: transparent; padding: 0 2px; font-size: 14px; color: var(--muted); }
+  .sync { display: inline-block; border: 0; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; background: var(--surface-2); color: var(--text-2); margin-bottom: 4px; }
+  .sync.warn { background: var(--warn-soft); color: var(--warn); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .view { display: none; }
+  .view.active { display: block; }
+  h3 { font-size: 13px; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; margin: 22px 2px 8px; display: flex; justify-content: space-between; }
+
+  /* Amount entry */
+  .amount-row { display: flex; align-items: center; gap: 8px; }
+  .sign { flex: none; width: 48px; height: 48px; border-radius: 12px; border: 0; font-size: 26px; font-weight: 600; background: var(--surface-2); }
+  .sign.plus { background: var(--accent-soft); color: var(--pos); }
+  .amount { flex: 1; min-width: 0; border: 0; background: transparent; font-size: 32px; font-weight: 700; text-align: right; outline: none; padding: 4px 0; }
+  .unit { color: var(--muted); font-size: 18px; }
+  .k000 { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 8px 10px; font-weight: 600; }
+  .hint { font-size: 12px; color: var(--muted); margin: 2px 0 12px 56px; }
+
+  .cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 10px 6px; text-align: center; font-size: 13px; line-height: 1.2; min-height: 64px; }
+  .chip .ic { display: block; font-size: 20px; margin-bottom: 4px; }
+  .chip.on { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+
+  .field { width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 12px; margin-bottom: 10px; outline: none; }
+  .field:focus { border-color: var(--accent); }
+  select.field { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+  .primary { width: 100%; border: 0; border-radius: 12px; padding: 14px; background: var(--accent); color: var(--on-accent); font-weight: 600; font-size: 16px; }
+  .primary:disabled { opacity: .6; }
+
+  /* Lists */
+  .day { font-size: 12px; color: var(--muted); margin: 12px 4px 4px; }
+  .item { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 10px 10px 12px; margin-bottom: 6px; }
+  .item.pending { border-style: dashed; }
+  .item .ic { font-size: 20px; width: 28px; text-align: center; flex: none; }
+  .item .main { flex: 1; min-width: 0; }
+  .item .t { font-weight: 500; }
+  .item .s { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .amt { font-weight: 600; white-space: nowrap; }
+  .item .amt.pos { color: var(--pos); }
+  .del { flex: none; border: 0; background: transparent; color: var(--muted); font-size: 18px; padding: 6px 8px; border-radius: 8px; min-width: 36px; }
+  .del.armed { background: var(--danger); color: #fff; font-size: 12px; font-weight: 600; }
+  .empty { color: var(--muted); text-align: center; padding: 20px; font-size: 14px; }
+
+  /* Summary */
+  .month-nav { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 12px; }
+  .month-nav button { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; width: 40px; height: 40px; font-size: 18px; }
+  .month-nav b { font-size: 17px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .stat .k { font-size: 12px; color: var(--text-2); }
+  .stat .v { font-size: 17px; font-weight: 700; }
+  .stat.hero { grid-column: 1 / -1; }
+  .stat.hero .v { font-size: 24px; }
+  .seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; }
+  .seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 8px; font-size: 13px; }
+  .seg button.on { background: var(--surface); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .chart-head { display: flex; justify-content: space-between; align-items: center; margin: 22px 2px 10px; }
+  .chart-head h3 { margin: 0; }
+
+  .donut { position: relative; width: 220px; height: 220px; margin: 4px auto 16px; }
+  .donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .donut circle.s { cursor: pointer; transition: stroke-width .15s; }
+  .donut circle.s.hl { stroke-width: 7.5; }
+  .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 0 44px; }
+  .donut-center .k { font-size: 12px; color: var(--text-2); }
+  .donut-center .v { font-size: 18px; font-weight: 700; }
+  .legend .row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); }
+  .legend .row:last-child { border-bottom: 0; }
+  .legend .row.hl { background: var(--accent-soft); border-radius: 8px; }
+  .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .legend .n { flex: 1; }
+  .legend .p { color: var(--text-2); font-size: 13px; width: 44px; text-align: right; }
+  .legend .a { font-weight: 600; min-width: 96px; text-align: right; }
+
+  .bars .row { padding: 8px 2px; }
+  .bars .top { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; }
+  .bars .top .a { font-weight: 600; }
+  .bars .top .p { color: var(--text-2); font-size: 12px; margin-left: 6px; font-weight: 400; }
+  .bars .track { height: 10px; }
+  .bars .bar { height: 10px; background: var(--series-1); border-radius: 0 4px 4px 0; min-width: 3px; }
+  .note { font-size: 12px; color: var(--muted); margin: 10px 2px 0; }
+
+  /* Assets */
+  .asset { display: flex; justify-content: space-between; align-items: center; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+  .asset:last-child { border-bottom: 0; }
+  .asset .ch { font-size: 12px; color: var(--text-2); }
+  .asset .b { font-weight: 700; font-size: 16px; text-align: right; }
+
+  /* Setup */
+  #v-setup h2 { font-size: 20px; margin: 24px 0 6px; }
+  #v-setup p { color: var(--text-2); font-size: 14px; margin: 0 0 14px; }
+  #v-setup label { display: block; font-size: 13px; color: var(--text-2); margin: 0 0 4px 2px; }
+  #v-setup .secondary { width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 12px; margin-top: 8px; }
+
+  /* Bottom nav */
+  nav { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); display: flex; justify-content: center; padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+  nav .in { display: flex; width: 100%; max-width: 560px; }
+  nav button { flex: 1; border: 0; background: transparent; padding: 8px 0 10px; font-size: 11px; color: var(--muted); }
+  nav button .ic { display: block; font-size: 22px; margin-bottom: 2px; filter: grayscale(1); opacity: .6; }
+  nav button.on { color: var(--accent); font-weight: 600; }
+  nav button.on .ic { filter: none; opacity: 1; }
+
+  .toast { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; pointer-events: none; transition: all .2s; z-index: 10; max-width: calc(100% - 32px); }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.err { background: var(--danger); color: #fff; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header id="app-header">
+  <div>
+    <div class="label"><span id="h-month">Balance</span><button class="gear" data-view="setup" aria-label="Cài đặt kết nối">⚙︎</button></div>
+    <div class="balance num" id="h-balance">—</div>
+  </div>
+  <div class="right">
+    <button class="sync hidden" id="h-sync"></button>
+    <div>Đã chi tháng này<b class="num" id="h-spent">—</b></div>
+  </div>
+</header>
+
+<!-- 1. Chi tiêu -->
+<section class="view active" id="v-expense">
+  <div class="card">
+    <div class="amount-row">
+      <button class="sign" data-form="expense" aria-label="Đổi dấu"></button>
+      <input class="amount num" id="e-amount" inputmode="numeric" placeholder="0" autocomplete="off">
+      <span class="unit">₫</span>
+      <button class="k000" data-target="e-amount">000</button>
+    </div>
+    <div class="hint" id="e-hint"></div>
+    <div class="cats" id="e-cats"></div>
+    <input class="field" id="e-note" placeholder="Ghi chú (không bắt buộc)" autocomplete="off">
+    <button class="primary" id="e-save">Lưu khoản chi</button>
+  </div>
+  <h3><span>Tháng này</span><span class="num" id="e-count"></span></h3>
+  <div id="e-list"></div>
+</section>
+
+<!-- 2. Tiền lưu động -->
+<section class="view" id="v-transfer">
+  <div class="card">
+    <div class="amount-row">
+      <button class="sign" data-form="transfer" aria-label="Đổi dấu"></button>
+      <input class="amount num" id="t-amount" inputmode="numeric" placeholder="0" autocomplete="off">
+      <span class="unit">₫</span>
+      <button class="k000" data-target="t-amount">000</button>
+    </div>
+    <div class="hint" id="t-hint"></div>
+    <select class="field" id="t-source"></select>
+    <input class="field hidden" id="t-source-note" placeholder="Ghi chú nguồn (bắt buộc)" autocomplete="off">
+    <input class="field" id="t-note" placeholder="Ghi chú (không bắt buộc)" autocomplete="off">
+    <button class="primary" id="t-save">Lưu tiền lưu động</button>
+  </div>
+  <h3><span>Tháng này</span><span class="num" id="t-total"></span></h3>
+  <div id="t-list"></div>
+</section>
+
+<!-- 3. Tổng hợp -->
+<section class="view" id="v-summary">
+  <div class="month-nav">
+    <button data-shift="-1" aria-label="Tháng trước">‹</button>
+    <b id="s-month"></b>
+    <button data-shift="1" aria-label="Tháng sau">›</button>
+  </div>
+  <div class="stats" id="s-stats"></div>
+  <div class="chart-head">
+    <h3>Chi theo danh mục</h3>
+    <div class="seg" id="s-mode">
+      <button data-mode="pie">Tròn</button>
+      <button data-mode="bar">Cột</button>
+    </div>
+  </div>
+  <div class="card" id="s-chart"></div>
+</section>
+
+<!-- 4. Tài sản -->
+<section class="view" id="v-assets">
+  <h3><span>Số dư tài sản</span><span id="a-month"></span></h3>
+  <div class="card" id="a-list"></div>
+  <p class="note">Số dư = số dư ban đầu (sheet “Tài sản”) − tiền đã rút vào ví + tiền đã chuyển vào nguồn đó. Thêm / sửa tài sản trực tiếp trên sheet “Tài sản”.</p>
+</section>
+
+<!-- Kết nối với Google Sheet -->
+<section class="view" id="v-setup">
+  <h2>Kết nối Google Sheet</h2>
+  <p>Chạy hàm <b>showSetupInfo</b> trong Apps Script, rồi copy 2 dòng trong nhật ký thực thi vào đây. Chỉ cần làm một lần trên mỗi máy.</p>
+  <label for="c-api">URL web app</label>
+  <input class="field" id="c-api" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <label for="c-token">Mã bí mật</label>
+  <input class="field" id="c-token" placeholder="16 ký tự" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <button class="primary" id="c-save">Kết nối</button>
+  <button class="secondary hidden" id="c-cancel" data-view="expense">Quay lại</button>
+</section>
+
+<nav id="app-nav"><div class="in">
+  <button data-view="expense" class="on"><span class="ic">✏️</span>Chi tiêu</button>
+  <button data-view="transfer"><span class="ic">🔁</span>Lưu động</button>
+  <button data-view="summary"><span class="ic">📊</span>Tổng hợp</button>
+  <button data-view="assets"><span class="ic">🏦</span>Tài sản</button>
+</div></nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ───── Lưu trên máy ─────
+// cache: dữ liệu lần tải gần nhất (hiện ngay khi mở app); outbox: thao tác chưa gửi được lên sheet.
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('sct.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('sct.' + k, JSON.stringify(v)); } catch (e) {} },
+};
+
+const S = {
+  api: store.get('api', ''),
+  token: store.get('token', ''),
+  server: store.get('cache', null),      // {config, data} — lần cuối server trả về
+  outbox: store.get('outbox', []),       // [{action, payload}] chờ gửi
+  config: null, data: null,              // = server + outbox (tính trong recompute)
+  sum: null, months: {},                 // tab Tổng hợp: tháng đang xem + cache tháng khác
+  sign: { expense: -1, transfer: 1 },
+  category: null,
+  chart: store.get('chart', 'pie'),
+  hl: null,
+  syncError: '',
+};
+
+const SIGN_HINTS = {
+  expense: { '-1': 'Khoản chi', '1': 'Khoản thu / hoàn tiền' },
+  transfer: { '1': 'Tiền vào ví (rút từ nguồn)', '-1': 'Tiền ra khỏi ví (chuyển vào nguồn)' },
+};
+// Bậc màu cho nền tối, cùng tông với màu nhập trong sheet “Danh mục”.
+const DARK_STEPS = { '#2a78d6': '#3987e5', '#eb6834': '#d95926', '#1baf7a': '#199e70', '#eda100': '#c98500', '#e87ba4': '#d55181', '#4a3aa7': '#9085e9', '#e34948': '#e66767', '#8a8984': '#76756f' };
+const isDark = () => matchMedia('(prefers-color-scheme: dark)').matches;
+
+// ───── Helpers ─────
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => new Intl.NumberFormat('vi-VN').format(Math.round(Math.abs(n)));
+const money = (n, signed) => (n < 0 ? '−' : signed && n > 0 ? '+' : '') + fmt(n) + ' ₫';
+const monthLabel = m => 'Tháng ' + m.slice(5) + '/' + m.slice(0, 4);
+const monthOf = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+const shiftMonth = (m, n) => monthOf(new Date(+m.slice(0, 4), +m.slice(5) - 1 + n, 1));
+const readAmount = el => Number(el.value.replace(/\D/g, '')) || 0;
+const newId = () => Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 5);
+const catOf = name => (S.config ? S.config.categories : []).find(c => c.name === name) || { name, icon: '•', color: '' };
+function colorOf(hex) {
+  const h = String(hex || '').toLowerCase();
+  if (!/^#[0-9a-f]{6}$/.test(h)) return 'var(--other)';
+  return isDark() ? (DARK_STEPS[h] || h) : h;
+}
+
+let toastTimer;
+function toast(msg, err) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast' + (err ? ' err' : ''); }, 2600);
+}
+
+// ───── Gọi API ─────
+/** Lỗi mạng → err.network; lỗi server có err.code (AUTH / INVALID / SERVER). */
+async function call(action, payload) {
+  let res;
+  try {
+    // Không đặt Content-Type để trình duyệt gửi text/plain → không cần preflight CORS với Apps Script.
+    const r = await fetch(S.api, { method: 'POST', body: JSON.stringify({ token: S.token, action, payload: payload || {} }) });
+    res = await r.json();
+  } catch (e) {
+    const err = new Error('Không kết nối được Google Sheet');
+    err.network = true;
+    throw err;
+  }
+  if (!res.ok) {
+    const err = new Error(res.error || 'Lỗi không rõ');
+    err.code = res.code;
+    throw err;
+  }
+  return res.result;
+}
+
+const configured = () => !!(S.api && S.token);
+
+function setServer(res) {
+  S.server = res;
+  S.months = {};
+  store.set('cache', res);
+  recompute();
+}
+
+/** Dữ liệu hiển thị = dữ liệu server + các thao tác còn trong outbox (lưu lạc quan). */
+function recompute() {
+  if (!S.server) { S.config = null; S.data = null; return; }
+  S.config = S.server.config;
+  const d = JSON.parse(JSON.stringify(S.server.data));
+  S.outbox.forEach(op => applyOp(d, op));
+  S.data = d;
+  if (!S.sum || S.sum.month === d.month) S.sum = d;
+}
+
+function applyOp(d, op) {
+  if (op.action === 'deleteEntry') {
+    const list = d[op.payload.kind];
+    const i = list.findIndex(x => x.id === op.payload.id);
+    if (i >= 0) adjust(d, op.payload.kind, list.splice(i, 1)[0], -1);
+    return;
+  }
+  const kind = op.action === 'addExpense' ? 'expenses' : 'transfers';
+  const e = Object.assign({}, op.payload, { createdAt: op.payload.at, month: monthOf(new Date(op.payload.at)), pending: true });
+  if (e.month !== d.month || d[kind].some(x => x.id === e.id)) return;
+  d[kind].unshift(e);
+  adjust(d, kind, e, 1);
+}
+
+/** Cộng (dir = 1) hoặc bỏ (dir = -1) một giao dịch khỏi các tổng — cùng công thức với Code.gs. */
+function adjust(d, kind, e, dir) {
+  const a = e.amount * dir;
+  d.balance += a;
+  if (kind === 'expenses') {
+    d.totalSpent -= a;
+    let c = d.byCategory.find(x => x.category === e.category);
+    if (!c) d.byCategory.push(c = { category: e.category, amount: 0 });
+    c.amount -= a;
+  } else {
+    d.totalFlow += a;
+    const asset = d.assets.find(x => x.name === e.source);
+    if (asset) { asset.balance -= a; asset.changeThisMonth -= a; }
+  }
+}
+
+function queue(action, payload) {
+  S.outbox.push({ action, payload });
+  store.set('outbox', S.outbox);
+  recompute();
+  renderAll();
+  sync();
+}
+
+let syncing = false, retryTimer;
+/** Gửi lần lượt các thao tác trong outbox. Lỗi mạng → giữ lại, thử lại sau. */
+async function sync() {
+  if (syncing || !configured()) return;
+  syncing = true;
+  renderSync();
+  try {
+    while (S.outbox.length) {
+      const op = S.outbox[0];
+      try {
+        const res = await call(op.action, op.payload);
+        S.outbox.shift();
+        store.set('outbox', S.outbox);
+        setServer(res);
+        S.syncError = '';
+      } catch (e) {
+        if (e.code === 'INVALID') {             // dữ liệu sai (vd. danh mục đã bị xoá khỏi sheet) → bỏ
+          S.outbox.shift();
+          store.set('outbox', S.outbox);
+          recompute();
+          toast('Không lưu được: ' + e.message, true);
+          continue;
+        }
+        S.syncError = e.message;
+        if (e.code === 'AUTH') showView('setup');
+        clearTimeout(retryTimer);
+        retryTimer = setTimeout(sync, 20000);
+        break;
+      }
+      renderAll();
+    }
+  } finally {
+    syncing = false;
+    renderAll();
+  }
+}
+
+/** Tải số liệu mới nhất (sau khi đã gửi hết outbox). */
+async function refresh() {
+  if (!configured()) return;
+  if (S.outbox.length) return sync();
+  try {
+    setServer(await call('getAppData'));
+    S.syncError = '';
+  } catch (e) {
+    S.syncError = e.message;
+    if (e.code === 'AUTH') showView('setup');
+  }
+  renderAll();
+}
+
+// ───── Render ─────
+function renderAll() {
+  renderSync();
+  if (!S.data) {
+    $('#e-list').innerHTML = $('#t-list').innerHTML = `<div class="empty">${configured() ? 'Đang tải…' : ''}</div>`;
+    return;
+  }
+  renderHeader();
+  renderSigns();
+  renderCategories();
+  renderSources();
+  renderExpenses();
+  renderTransfers();
+  renderSummary();
+  renderAssets();
+}
+
+function renderSync() {
+  const el = $('#h-sync'), n = S.outbox.length;
+  let text = '';
+  if (S.syncError) text = '⚠ ' + (n ? 'Chưa lưu ' + n + ' · ' : '') + 'thử lại';
+  else if (n) text = '⟳ Đang lưu ' + n;
+  else if (syncing) text = '⟳ Đang tải';
+  el.textContent = text;
+  el.classList.toggle('hidden', !text);
+  el.classList.toggle('warn', !!S.syncError);
+  el.title = S.syncError;
+}
+
+function renderHeader() {
+  $('#h-month').textContent = 'Balance · ' + monthLabel(S.data.month);
+  $('#h-balance').textContent = money(S.data.balance);
+  $('#h-spent').textContent = money(S.data.totalSpent);
+}
+
+function renderSigns() {
+  $$('.sign').forEach(b => {
+    const form = b.dataset.form, sign = S.sign[form];
+    b.textContent = sign < 0 ? '−' : '+';
+    b.classList.toggle('plus', sign > 0);
+    $('#' + form[0] + '-hint').textContent = SIGN_HINTS[form][sign];
+  });
+}
+
+function renderCategories() {
+  if (S.category && !S.config.categories.some(c => c.name === S.category)) S.category = null;
+  $('#e-cats').innerHTML = S.config.categories.map(c =>
+    `<button class="chip${c.name === S.category ? ' on' : ''}" data-cat="${esc(c.name)}"><span class="ic">${esc(c.icon || '•')}</span>${esc(c.name)}</button>`
+  ).join('');
+}
+
+function renderSources() {
+  const sel = $('#t-source'), prev = sel.value;
+  sel.innerHTML = '<option value="">Chọn nguồn tiền…</option>' +
+    S.config.sources.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+  if (S.config.sources.some(s => s.name === prev)) sel.value = prev;
+  toggleSourceNote();
+}
+
+function toggleSourceNote() {
+  const src = S.config && S.config.sources.find(s => s.name === $('#t-source').value);
+  $('#t-source-note').classList.toggle('hidden', !(src && src.requireNote));
+}
+
+function dayKey(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' });
+}
+function timeOf(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function groupedList(rows, kind, rowHtml) {
+  if (!rows.length) return '<div class="empty">Chưa có dữ liệu tháng này</div>';
+  let last = '', html = '';
+  rows.forEach(r => {
+    const d = dayKey(r.createdAt);
+    if (d !== last) { html += `<div class="day">${esc(d)}</div>`; last = d; }
+    html += `<div class="item${r.pending ? ' pending' : ''}">${rowHtml(r)}
+      <span class="amt num${r.amount > 0 ? ' pos' : ''}">${money(r.amount, true)}</span>
+      <button class="del" data-kind="${kind}" data-id="${esc(r.id)}" aria-label="Xoá">×</button></div>`;
+  });
+  return html;
+}
+
+const subline = r => esc(r.pending ? 'Đang lưu…' : timeOf(r.createdAt)) + (r.note ? ' · ' + esc(r.note) : '');
+
+function renderExpenses() {
+  const rows = S.data.expenses;
+  $('#e-count').textContent = rows.length ? rows.length + ' khoản · ' + money(S.data.totalSpent) : '';
+  $('#e-list').innerHTML = groupedList(rows, 'expenses', r => {
+    const c = catOf(r.category);
+    return `<span class="ic">${esc(c.icon || '•')}</span><div class="main"><div class="t">${esc(r.category)}</div>
+      <div class="s">${subline(r)}</div></div>`;
+  });
+}
+
+function renderTransfers() {
+  const rows = S.data.transfers;
+  $('#t-total').textContent = rows.length ? money(S.data.totalFlow, true) : '';
+  $('#t-list').innerHTML = groupedList(rows, 'transfers', r =>
+    `<span class="ic">${r.amount > 0 ? '⬇️' : '⬆️'}</span><div class="main"><div class="t">${esc(r.source)}${r.sourceNote ? ' · ' + esc(r.sourceNote) : ''}</div>
+      <div class="s">${subline(r)}</div></div>`);
+}
+
+function renderSummary() {
+  const d = S.sum;
+  if (!d) return;
+  $('#s-month').textContent = monthLabel(d.month);
+  $$('#s-mode button').forEach(b => b.classList.toggle('on', b.dataset.mode === S.chart));
+  if (d.loading) {
+    $('#s-stats').innerHTML = '';
+    $('#s-chart').innerHTML = '<div class="empty">Đang tải…</div>';
+    return;
+  }
+  $('#s-stats').innerHTML = [
+    ['Balance tháng trước', money(d.prevBalance)],
+    ['Tổng chi', money(d.totalSpent)],
+    ['Tiền lưu động', money(d.totalFlow, true)],
+    ['Balance cuối tháng', money(d.balance), 'hero'],
+  ].map(([k, v, cls]) => `<div class="stat ${cls || ''}"><div class="k">${k}</div><div class="v num">${v}</div></div>`).join('');
+
+  const spend = d.byCategory.filter(x => x.amount > 0).sort((a, b) => b.amount - a.amount);
+  const refunds = d.byCategory.filter(x => x.amount < 0);
+  const total = spend.reduce((t, x) => t + x.amount, 0);
+  const refundNote = refunds.length
+    ? `<p class="note">Hoàn tiền nhiều hơn chi: ${refunds.map(x => esc(x.category) + ' ' + money(x.amount, true)).join(', ')}</p>` : '';
+
+  if (!total) { $('#s-chart').innerHTML = '<div class="empty">Chưa có khoản chi trong tháng</div>' + refundNote; return; }
+  $('#s-chart').innerHTML = (S.chart === 'pie' ? pieChart(spend, total) : barChart(spend, total)) + refundNote;
+  if (S.hl != null) highlight(S.hl, true);
+}
+
+/** Donut: danh mục < 3% gộp vào “Còn lại” để các lát nhỏ không bị đè nhau. */
+function pieChart(spend, total) {
+  const big = spend.filter(x => x.amount / total >= 0.03);
+  const small = spend.filter(x => x.amount / total < 0.03);
+  const items = big.map(x => { const c = catOf(x.category); return { name: x.category, icon: c.icon, color: colorOf(c.color), amount: x.amount }; });
+  if (small.length === 1) {
+    const c = catOf(small[0].category);
+    items.push({ name: small[0].category, icon: c.icon, color: colorOf(c.color), amount: small[0].amount });
+  } else if (small.length) {
+    items.push({ name: 'Còn lại (' + small.length + ' mục)', icon: '', color: 'var(--other)', amount: small.reduce((t, x) => t + x.amount, 0) });
+  }
+  S.pieItems = items;
+  S.pieTotal = total;
+
+  const gap = items.length > 1 ? 0.9 : 0;
+  let offset = 0;
+  const segs = items.map((it, i) => {
+    const p = it.amount / total * 100, len = Math.max(p - gap, 0.2);
+    const seg = `<circle class="s" data-i="${i}" r="15.9155" cx="21" cy="21" fill="none" stroke="${it.color}" stroke-width="6"
+      stroke-dasharray="${len} ${100 - len}" stroke-dashoffset="${-offset}"><title>${esc(it.name)}: ${money(it.amount)}</title></circle>`;
+    offset += p;
+    return seg;
+  }).join('');
+
+  const legend = items.map((it, i) => `<div class="row" data-i="${i}"><span class="sw" style="background:${it.color}"></span>
+    <span class="n">${esc(it.icon ? it.icon + ' ' : '')}${esc(it.name)}</span>
+    <span class="p num">${Math.round(it.amount / total * 100)}%</span><span class="a num">${money(it.amount)}</span></div>`).join('');
+
+  return `<div class="donut"><svg viewBox="0 0 42 42">${segs}</svg><div class="donut-center" id="dc">${centerHtml(null)}</div></div>
+    <div class="legend">${legend}</div>`;
+}
+
+function centerHtml(i) {
+  if (i == null || !S.pieItems[i]) return `<div class="k">Tổng chi</div><div class="v num">${money(S.pieTotal)}</div>`;
+  const it = S.pieItems[i];
+  return `<div class="k">${esc(it.name)} · ${Math.round(it.amount / S.pieTotal * 100)}%</div><div class="v num">${money(it.amount)}</div>`;
+}
+
+function highlight(i, keep) {
+  if (!keep) S.hl = S.hl === i ? null : i;
+  $$('#s-chart [data-i]').forEach(el => el.classList.toggle('hl', S.hl !== null && +el.dataset.i === S.hl));
+  const dc = $('#dc'); if (dc) dc.innerHTML = centerHtml(S.hl);
+}
+
+function barChart(spend, total) {
+  const max = spend[0].amount;
+  return '<div class="bars">' + spend.map(x => {
+    const c = catOf(x.category);
+    return `<div class="row"><div class="top"><span>${esc(c.icon ? c.icon + ' ' : '')}${esc(x.category)}</span>
+      <span class="a num">${money(x.amount)}<span class="p">${Math.round(x.amount / total * 100)}%</span></span></div>
+      <div class="track"><div class="bar" style="width:${(x.amount / max * 100).toFixed(1)}%"></div></div></div>`;
+  }).join('') + '</div>';
+}
+
+function renderAssets() {
+  $('#a-month').textContent = 'đến hết ' + monthLabel(S.data.month).toLowerCase();
+  const list = S.data.assets;
+  if (!list.length) { $('#a-list').innerHTML = '<div class="empty">Chưa có tài sản nào được theo dõi</div>'; return; }
+  const total = list.reduce((t, a) => t + a.balance, 0);
+  $('#a-list').innerHTML = list.map(a => `<div class="asset"><div><div>${esc(a.name)}</div>
+      <div class="ch num">${a.changeThisMonth ? 'Tháng này ' + money(a.changeThisMonth, true) : 'Tháng này không đổi'}</div></div>
+      <div class="b num">${money(a.balance)}</div></div>`).join('') +
+    `<div class="asset"><b>Tổng</b><div class="b num">${money(total)}</div></div>`;
+}
+
+// ───── Actions ─────
+function saveExpense() {
+  if (!S.config) return toast('Chưa tải xong dữ liệu', true);
+  const amount = readAmount($('#e-amount'));
+  if (!amount) { toast('Nhập số tiền', true); return $('#e-amount').focus(); }
+  if (!S.category) return toast('Chọn danh mục', true);
+  const signed = amount * S.sign.expense;
+  queue('addExpense', { id: newId(), at: new Date().toISOString(), category: S.category, amount: signed, note: $('#e-note').value.trim() });
+  $('#e-amount').value = ''; $('#e-note').value = '';
+  toast('Đã thêm ' + money(signed, true) + ' · ' + S.category);
+}
+
+function saveTransfer() {
+  if (!S.config) return toast('Chưa tải xong dữ liệu', true);
+  const amount = readAmount($('#t-amount'));
+  const source = $('#t-source').value;
+  const src = S.config.sources.find(s => s.name === source);
+  if (!amount) { toast('Nhập số tiền', true); return $('#t-amount').focus(); }
+  if (!src) return toast('Chọn nguồn tiền', true);
+  const sourceNote = src.requireNote ? $('#t-source-note').value.trim() : '';
+  if (src.requireNote && !sourceNote) { toast('Nguồn “' + source + '” cần ghi chú', true); return $('#t-source-note').focus(); }
+  const signed = amount * S.sign.transfer;
+  queue('addTransfer', { id: newId(), at: new Date().toISOString(), source, sourceNote, amount: signed, note: $('#t-note').value.trim() });
+  $('#t-amount').value = ''; $('#t-note').value = ''; $('#t-source-note').value = '';
+  toast('Đã thêm ' + money(signed, true) + ' · ' + source);
+}
+
+let armTimer;
+function onDelete(btn) {
+  if (!btn.classList.contains('armed')) {
+    $$('.del.armed').forEach(b => { b.classList.remove('armed'); b.textContent = '×'; });
+    btn.classList.add('armed'); btn.textContent = 'Xoá?';
+    clearTimeout(armTimer);
+    armTimer = setTimeout(() => { btn.classList.remove('armed'); btn.textContent = '×'; }, 3000);
+    return;
+  }
+  clearTimeout(armTimer);
+  const { kind, id } = btn.dataset;
+  // Khoản chưa kịp gửi lên sheet: bỏ khỏi hàng chờ là xong (trừ khi đang được gửi).
+  const i = S.outbox.findIndex(op => op.payload.id === id && op.action !== 'deleteEntry');
+  if (i > 0 || (i === 0 && !syncing)) {
+    S.outbox.splice(i, 1);
+    store.set('outbox', S.outbox);
+    recompute(); renderAll();
+  } else {
+    queue('deleteEntry', { kind, id });
+  }
+  toast('Đã xoá');
+}
+
+async function loadSummary(month) {
+  S.hl = null;
+  if (S.data && month === S.data.month) { S.sum = S.data; return renderSummary(); }
+  if (S.months[month]) { S.sum = S.months[month]; return renderSummary(); }
+  S.sum = { month, loading: true };
+  renderSummary();
+  try {
+    const d = await call('getMonthData', { month });
+    S.months[month] = d;
+    if (S.sum.month === month) { S.sum = d; renderSummary(); }   // người dùng chưa chuyển tháng khác
+  } catch (e) { toast(e.message, true); }
+}
+
+async function saveConnection() {
+  const api = $('#c-api').value.trim(), token = $('#c-token').value.trim();
+  if (!/^https:\/\/script\.google\.com\/.+\/exec/.test(api)) return toast('URL phải có dạng https://script.google.com/…/exec', true);
+  if (!token) return toast('Nhập mã bí mật', true);
+  const btn = $('#c-save');
+  btn.disabled = true; btn.textContent = 'Đang kết nối…';
+  const prev = { api: S.api, token: S.token };
+  Object.assign(S, { api, token });
+  try {
+    const res = await call('getAppData');
+    store.set('api', api); store.set('token', token);
+    S.sign.expense = res.config.defaultSign;
+    S.syncError = '';
+    setServer(res);
+    showView('expense');
+    renderAll();
+    toast('Đã kết nối');
+    sync();
+  } catch (e) {
+    Object.assign(S, prev);
+    toast(e.code === 'AUTH' ? 'Sai mã bí mật' : e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Kết nối';
+  }
+}
+
+function showView(name) {
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'v-' + name));
+  $$('nav button').forEach(b => b.classList.toggle('on', b.dataset.view === name));
+  const setup = name === 'setup';
+  $('#app-nav').classList.toggle('hidden', setup);
+  if (setup) {
+    $('#c-api').value = S.api; $('#c-token').value = S.token;
+    $('#c-cancel').classList.toggle('hidden', !S.server);
+  }
+  window.scrollTo(0, 0);
+  if (name === 'summary' && S.data) loadSummary(S.sum ? S.sum.month : S.data.month);
+}
+
+// ───── Events ─────
+document.addEventListener('click', e => {
+  const t = e.target.closest('button, [data-i]');
+  if (!t) return;
+  if (t.id === 'h-sync') { S.syncError = ''; return S.outbox.length ? sync() : refresh(); }
+  if (t.dataset.view) return showView(t.dataset.view);
+  if (t.dataset.cat) { S.category = t.dataset.cat; return renderCategories(); }
+  if (t.dataset.form) { S.sign[t.dataset.form] *= -1; return renderSigns(); }
+  if (t.dataset.target) {
+    const el = $('#' + t.dataset.target), n = readAmount(el);
+    if (n) el.value = fmt(n * 1000);
+    return;
+  }
+  if (t.dataset.kind) return onDelete(t);
+  if (t.dataset.shift) return loadSummary(shiftMonth(S.sum.month, +t.dataset.shift));
+  if (t.dataset.mode) { S.chart = t.dataset.mode; S.hl = null; store.set('chart', S.chart); return renderSummary(); }
+  if (t.dataset.i != null) return highlight(+t.dataset.i);
+});
+
+$$('.amount').forEach(el => el.addEventListener('input', () => {
+  const n = readAmount(el);
+  el.value = n ? fmt(n) : '';
+}));
+$('#e-save').addEventListener('click', saveExpense);
+$('#t-save').addEventListener('click', saveTransfer);
+$('#c-save').addEventListener('click', saveConnection);
+$('#t-source').addEventListener('change', toggleSourceNote);
+['#e-note', '#e-amount'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') saveExpense(); }));
+['#t-note', '#t-amount', '#t-source-note'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') saveTransfer(); }));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', renderSummary);
+// Quay lại app / có mạng lại → gửi nốt và tải số mới.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+window.addEventListener('online', refresh);
+
+// ───── Khởi động ─────
+if (S.server) S.sign.expense = S.server.config.defaultSign;
+recompute();
+renderAll();
+if (configured()) refresh();
+else showView('setup');
+</script>
+</body>
+</html>
