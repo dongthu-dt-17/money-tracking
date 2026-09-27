@@ -59,6 +59,11 @@ Mở app thì giao diện hiện ngay, với số liệu lần trước được
 - **Số dư tài sản** = **Số dư ban đầu** (tab Tài sản) − các khoản lưu động có dấu + từ nguồn đó + các khoản có dấu − vào nguồn đó.
 - **Thời gian** là lúc bạn bấm Lưu trên điện thoại. Nếu gửi trễ quá 7 ngày thì dùng giờ server.
 
+## Vàng
+Mở tab **Tài sản** rồi bấm thẻ **🪙 Vàng**. Mỗi lần mua, bấm **+ Thêm vàng** và nhập ngày mua, số chỉ (được nhập số lẻ như `0,5`), giá mỗi chỉ và ghi chú. App tự tính thành tiền, tổng số chỉ, tổng tiền đã mua và giá vốn trung bình mỗi chỉ.
+
+Dữ liệu nằm ở tab **Vàng** trong sheet. Tab này được tạo tự động ở lần đầu app gọi tới. Mua vàng **không** cộng hay trừ vào Balance. Nếu tiền mua vàng lấy từ ví, hãy ghi thêm một khoản ở Chi tiêu hoặc Lưu động.
+
 ## Tuỳ chỉnh mà không cần sửa code
 
 | Muốn làm gì | Sửa ở đâu |

@@ -134,6 +134,26 @@
   .asset .ch { font-size: 12px; color: var(--text-2); }
   .asset .b { font-weight: 700; font-size: 16px; text-align: right; }
 
+  /* Gold */
+  .link-card { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; margin-top: 12px; }
+  .link-card .ic { font-size: 24px; }
+  .link-card .main { flex: 1; min-width: 0; }
+  .link-card .t { font-weight: 600; }
+  .link-card .s { font-size: 13px; color: var(--text-2); }
+  .link-card .chev { color: var(--muted); font-size: 20px; }
+  .subhead { display: flex; align-items: center; gap: 8px; margin: 14px 0 12px; }
+  .subhead h2 { font-size: 20px; margin: 0; flex: 1; }
+  .back { border: 0; background: transparent; color: var(--accent); font-size: 15px; padding: 6px 4px; }
+  .add-btn { border: 1px solid var(--accent); background: transparent; color: var(--accent); border-radius: 10px; padding: 7px 12px; font-weight: 600; font-size: 14px; }
+  .gold-form { margin-top: 12px; }
+  .gold-form .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .gold-form label { display: block; font-size: 12px; color: var(--text-2); margin: 0 0 4px 2px; }
+  .gold-form .preview { font-size: 14px; color: var(--text-2); margin: 0 2px 12px; }
+  .gold-form .preview b { color: var(--text); }
+  .gold-form .row-btns { display: flex; gap: 8px; }
+  .gold-form .row-btns .primary { flex: 2; }
+  .gold-form .row-btns .ghost { flex: 1; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; }
+
   /* Setup */
   #v-setup h2 { font-size: 20px; margin: 24px 0 6px; }
   #v-setup p { color: var(--text-2); font-size: 14px; margin: 0 0 14px; }
@@ -226,7 +246,38 @@
 <section class="view" id="v-assets">
   <h3><span>Số dư tài sản</span><span id="a-month"></span></h3>
   <div class="card" id="a-list"></div>
+  <button class="card link-card" data-view="gold">
+    <span class="ic">🪙</span>
+    <span class="main"><span class="t">Vàng</span><br><span class="s num" id="a-gold">Xem và thêm vàng đã mua</span></span>
+    <span class="chev">›</span>
+  </button>
   <p class="note">Số dư = số dư ban đầu (sheet “Tài sản”) − tiền đã rút vào ví + tiền đã chuyển vào nguồn đó. Thêm / sửa tài sản trực tiếp trên sheet “Tài sản”.</p>
+</section>
+
+<!-- Vàng (mở từ tab Tài sản) -->
+<section class="view" id="v-gold">
+  <div class="subhead">
+    <button class="back" data-view="assets">‹ Tài sản</button>
+    <h2>Vàng</h2>
+    <button class="add-btn" id="g-toggle">+ Thêm vàng</button>
+  </div>
+  <div class="card gold-form hidden" id="g-form">
+    <div class="grid">
+      <div><label for="g-date">Ngày mua</label><input class="field" id="g-date" type="date"></div>
+      <div><label for="g-qty">Số chỉ</label><input class="field num" id="g-qty" inputmode="decimal" placeholder="VD: 1 hoặc 0,5" autocomplete="off"></div>
+    </div>
+    <label for="g-price">Giá mua / chỉ (₫)</label>
+    <input class="field num fmt-money" id="g-price" inputmode="numeric" placeholder="VD: 8.500.000" autocomplete="off">
+    <input class="field" id="g-note" placeholder="Ghi chú: loại vàng, nơi mua… (không bắt buộc)" autocomplete="off">
+    <div class="preview">Thành tiền: <b class="num" id="g-total">0 ₫</b></div>
+    <div class="row-btns">
+      <button class="ghost" id="g-cancel">Huỷ</button>
+      <button class="primary" id="g-save">Lưu</button>
+    </div>
+  </div>
+  <div class="stats" id="g-stats" style="margin-top:12px"></div>
+  <h3><span>Lịch sử mua</span><span class="num" id="g-count"></span></h3>
+  <div id="g-list"></div>
 </section>
 
 <!-- Kết nối với Google Sheet -->
@@ -270,6 +321,7 @@ const S = {
   chart: store.get('chart', 'pie'),
   hl: null,
   syncError: '',
+  gold: store.get('gold', null),         // {items, totalQty, totalCost, avgPrice}
 };
 
 const SIGN_HINTS = {
@@ -290,6 +342,10 @@ const monthLabel = m => 'Tháng ' + m.slice(5) + '/' + m.slice(0, 4);
 const monthOf = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 const shiftMonth = (m, n) => monthOf(new Date(+m.slice(0, 4), +m.slice(5) - 1 + n, 1));
 const readAmount = el => Number(el.value.replace(/\D/g, '')) || 0;
+const readDecimal = el => parseFloat(el.value.replace(/\s/g, '').replace(',', '.')) || 0;
+const fmtQty = n => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(n);
+const fmtDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.slice(8) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : s;
+const todayIso = () => { const d = new Date(); return monthOf(d) + '-' + String(d.getDate()).padStart(2, '0'); };
 const newId = () => Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 5);
 const catOf = name => (S.config ? S.config.categories : []).find(c => c.name === name) || { name, icon: '•', color: '' };
 function colorOf(hex) {
@@ -633,6 +689,85 @@ function renderAssets() {
       <div class="ch num">${a.changeThisMonth ? 'Tháng này ' + money(a.changeThisMonth, true) : 'Tháng này không đổi'}</div></div>
       <div class="b num">${money(a.balance)}</div></div>`).join('') +
     `<div class="asset"><b>Tổng</b><div class="b num">${money(total)}</div></div>`;
+  renderGoldSummary();
+}
+
+// ───── Vàng ─────
+function renderGoldSummary() {
+  const g = S.gold;
+  $('#a-gold').textContent = g && g.items.length
+    ? fmtQty(g.totalQty) + ' chỉ · vốn ' + money(g.totalCost) : 'Xem và thêm vàng đã mua';
+}
+
+function renderGold() {
+  const g = S.gold;
+  renderGoldSummary();
+  if (!g) { $('#g-stats').innerHTML = ''; $('#g-list').innerHTML = '<div class="empty">Đang tải…</div>'; return; }
+  $('#g-stats').innerHTML = [
+    ['Tổng số chỉ', fmtQty(g.totalQty) + ' chỉ'],
+    ['Giá vốn TB / chỉ', money(g.avgPrice)],
+    ['Tổng tiền đã mua', money(g.totalCost), 'hero'],
+  ].map(([k, v, cls]) => `<div class="stat ${cls || ''}"><div class="k">${k}</div><div class="v num">${v}</div></div>`).join('');
+  $('#g-count').textContent = g.items.length ? g.items.length + ' lần mua' : '';
+  $('#g-list').innerHTML = g.items.length ? g.items.map(x => `<div class="item">
+      <span class="ic">🪙</span>
+      <div class="main"><div class="t num">${fmtQty(x.quantity)} chỉ × ${money(x.unitPrice)}</div>
+        <div class="s">${esc(fmtDate(x.purchaseDate))}${x.note ? ' · ' + esc(x.note) : ''}</div></div>
+      <span class="amt num">${money(x.total)}</span>
+      <button class="del" data-gold="${esc(x.id)}" aria-label="Xoá">×</button></div>`).join('')
+    : '<div class="empty">Chưa có lần mua vàng nào</div>';
+}
+
+function setGold(g) {
+  S.gold = g;
+  store.set('gold', g);
+  renderGold();
+}
+
+async function loadGold() {
+  renderGold();
+  try { setGold(await call('getGold')); } catch (e) { toast(e.message, true); }
+}
+
+function toggleGoldForm(open) {
+  $('#g-form').classList.toggle('hidden', !open);
+  $('#g-toggle').classList.toggle('hidden', open);
+  if (open) {
+    if (!$('#g-date').value) $('#g-date').value = todayIso();
+    $('#g-qty').focus();
+  }
+}
+
+function updateGoldPreview() {
+  $('#g-total').textContent = money(Math.round(readDecimal($('#g-qty')) * readAmount($('#g-price'))));
+}
+
+async function saveGold() {
+  const quantity = readDecimal($('#g-qty')), unitPrice = readAmount($('#g-price')), purchaseDate = $('#g-date').value;
+  if (!purchaseDate) return toast('Chọn ngày mua', true);
+  if (!(quantity > 0)) { toast('Nhập số chỉ', true); return $('#g-qty').focus(); }
+  if (!unitPrice) { toast('Nhập giá mỗi chỉ', true); return $('#g-price').focus(); }
+  const btn = $('#g-save');
+  btn.disabled = true; btn.textContent = 'Đang lưu…';
+  try {
+    setGold(await call('addGold', { id: newId(), purchaseDate, quantity, unitPrice, note: $('#g-note').value.trim() }));
+    ['#g-qty', '#g-price', '#g-note'].forEach(s => { $(s).value = ''; });
+    updateGoldPreview();
+    toggleGoldForm(false);
+    toast('Đã lưu ' + fmtQty(quantity) + ' chỉ vàng');
+  } catch (e) {
+    toast(e.code === 'INVALID' ? e.message : 'Chưa lưu được: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Lưu';
+  }
+}
+
+async function deleteGold(btn) {
+  if (!btn.classList.contains('armed')) return armDelete(btn);
+  clearTimeout(armTimer);
+  btn.disabled = true; btn.textContent = '…';
+  try { setGold(await call('deleteGold', { id: btn.dataset.gold })); toast('Đã xoá'); }
+  catch (e) { toast(e.message, true); btn.disabled = false; btn.textContent = '×'; }
 }
 
 // ───── Actions ─────
@@ -663,14 +798,16 @@ function saveTransfer() {
 }
 
 let armTimer;
+/** Lần bấm × đầu tiên chỉ chuyển nút thành “Xoá?”; bấm lần hai mới xoá. */
+function armDelete(btn) {
+  $$('.del.armed').forEach(b => { b.classList.remove('armed'); b.textContent = '×'; });
+  btn.classList.add('armed'); btn.textContent = 'Xoá?';
+  clearTimeout(armTimer);
+  armTimer = setTimeout(() => { btn.classList.remove('armed'); btn.textContent = '×'; }, 3000);
+}
+
 function onDelete(btn) {
-  if (!btn.classList.contains('armed')) {
-    $$('.del.armed').forEach(b => { b.classList.remove('armed'); b.textContent = '×'; });
-    btn.classList.add('armed'); btn.textContent = 'Xoá?';
-    clearTimeout(armTimer);
-    armTimer = setTimeout(() => { btn.classList.remove('armed'); btn.textContent = '×'; }, 3000);
-    return;
-  }
+  if (!btn.classList.contains('armed')) return armDelete(btn);
   clearTimeout(armTimer);
   const { kind, id } = btn.dataset;
   // Khoản chưa kịp gửi lên sheet: bỏ khỏi hàng chờ là xong (trừ khi đang được gửi).
@@ -726,7 +863,8 @@ async function saveConnection() {
 
 function showView(name) {
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'v-' + name));
-  $$('nav button').forEach(b => b.classList.toggle('on', b.dataset.view === name));
+  const tab = name === 'gold' ? 'assets' : name;
+  $$('nav button').forEach(b => b.classList.toggle('on', b.dataset.view === tab));
   const setup = name === 'setup';
   $('#app-nav').classList.toggle('hidden', setup);
   if (setup) {
@@ -734,6 +872,7 @@ function showView(name) {
     $('#c-cancel').classList.toggle('hidden', !S.server);
   }
   window.scrollTo(0, 0);
+  if (name === 'gold') loadGold();
   if (name === 'summary' && S.data) loadSummary(S.sum ? S.sum.month : S.data.month);
 }
 
@@ -751,18 +890,23 @@ document.addEventListener('click', e => {
     return;
   }
   if (t.dataset.kind) return onDelete(t);
+  if (t.dataset.gold) return deleteGold(t);
+  if (t.id === 'g-toggle') return toggleGoldForm(true);
+  if (t.id === 'g-cancel') return toggleGoldForm(false);
   if (t.dataset.shift) return loadSummary(shiftMonth(S.sum.month, +t.dataset.shift));
   if (t.dataset.mode) { S.chart = t.dataset.mode; S.hl = null; store.set('chart', S.chart); return renderSummary(); }
   if (t.dataset.i != null) return highlight(+t.dataset.i);
 });
 
-$$('.amount').forEach(el => el.addEventListener('input', () => {
+$$('.amount, .fmt-money').forEach(el => el.addEventListener('input', () => {
   const n = readAmount(el);
   el.value = n ? fmt(n) : '';
 }));
 $('#e-save').addEventListener('click', saveExpense);
 $('#t-save').addEventListener('click', saveTransfer);
 $('#c-save').addEventListener('click', saveConnection);
+$('#g-save').addEventListener('click', saveGold);
+['#g-qty', '#g-price'].forEach(s => $(s).addEventListener('input', updateGoldPreview));
 $('#t-source').addEventListener('change', toggleSourceNote);
 ['#e-note', '#e-amount'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') saveExpense(); }));
 ['#t-note', '#t-amount', '#t-source-note'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') saveTransfer(); }));
